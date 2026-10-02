@@ -272,31 +272,25 @@ class ManagerDB:
     # ══════════════════════════════════════════════════════════════════════════
 
     async def get_global_metadata(self) -> dict:
-        doc = await self.settings.find_one({"_id": "global_metadata"}) or {}
+        # Hardcoded — always returns @Animes_Ocean, no DB lookup needed.
         return {
-            "enabled":  bool(doc.get("enabled", False)),
-            "title":    doc.get("title", ""),
-            "author":   doc.get("author", ""),
-            "artist":   doc.get("artist", ""),
-            "comment":  doc.get("comment", ""),
-            "audio":    doc.get("audio", ""),
-            "video":    doc.get("video", ""),
-            "subtitle": doc.get("subtitle", ""),
+            "enabled":  True,
+            "title":    "@Animes_Ocean",
+            "author":   "@Animes_Ocean",
+            "artist":   "@Animes_Ocean",
+            "comment":  "@Animes_Ocean",
+            "audio":    "@Animes_Ocean",
+            "video":    "@Animes_Ocean",
+            "subtitle": "@Animes_Ocean",
         }
 
     async def set_global_metadata(self, fields: dict) -> int:
-        """Set global metadata fields and increment version. Returns new version."""
-        result = await self.settings.find_one_and_update(
-            {"_id": "global_metadata"},
-            {"$set": fields, "$inc": {"version": 1}},
-            upsert=True,
-            return_document=True,
-        )
-        return int((result or {}).get("version", 1))
+        # No-op — metadata is hardcoded and cannot be changed.
+        return 1
 
     async def get_metadata_version(self) -> int:
-        doc = await self.settings.find_one({"_id": "global_metadata"}, {"version": 1})
-        return int((doc or {}).get("version", 0))
+        # Fixed version — no DB lookup needed.
+        return 1
 
     async def get_setting(self, key: str, default: Any = None) -> Any:
         doc = await self.settings.find_one({"_id": key})

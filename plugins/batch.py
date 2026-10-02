@@ -247,20 +247,19 @@ async def handle_file(client: Client, message: Message) -> None:
         )
 
     # ── Build job document ────────────────────────────────────────────────────
-    metadata_version = max(1, await db.get_metadata_version())
+    metadata_version = 1
 
-    # Merge global metadata override with user metadata.
-    # Only pass the 7 keys that ffmpeg.py actually injects — never "enabled"
-    # or any other control key, to avoid unexpected FFmpeg tag names.
-    _META_KEYS = {"title", "artist", "author", "comment", "audio", "video", "subtitle"}
-
-    global_meta = await db.get_global_metadata()
-    if global_meta.get("enabled"):
-        metadata = {k: v for k, v in global_meta.items() if k in _META_KEYS}
-    else:
-        user_meta = ps.get("metadata_fields", {})
-        metadata  = {k: v for k, v in user_meta.items() if k in _META_KEYS} \
-                    if ps.get("metadata") else {}
+    # Hardcoded metadata — always embed @Animes_Ocean.
+    # Cannot be changed by any user, command, or database setting.
+    metadata = {
+        "title":    "@Animes_Ocean",
+        "artist":   "@Animes_Ocean",
+        "author":   "@Animes_Ocean",
+        "comment":  "@Animes_Ocean",
+        "audio":    "@Animes_Ocean",
+        "video":    "@Animes_Ocean",
+        "subtitle": "@Animes_Ocean",
+    }
 
     job = {
         "job_id":             job_id,      # reuse the same ID generated above
