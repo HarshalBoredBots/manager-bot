@@ -1,0 +1,15 @@
+# ── Telegram ──────────────────────────────────────────────────────────────────
+pyrogram==2.0.106
+TgCrypto              # C-based crypto — required by Pyrogram for speed
+
+# ── Database ──────────────────────────────────────────────────────────────────
+motor                 # Async MongoDB driver
+dnspython             # Required by motor to resolve mongodb+srv:// URIs
+
+# ── HTTP / async I/O ─────────────────────────────────────────────────────────
+aiohttp               # Health-check server + ImgBB uploads + Telegraph API calls
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+pytz                  # Timezone support — IST timestamps in log channel messages
+Pillow                # Image resize (thumbnail preview in /view_thumb)
+psutil
