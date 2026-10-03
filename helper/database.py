@@ -188,6 +188,31 @@ class ManagerDB:
     async def set_media_preference(self, user_id: int, pref: str) -> None:
         await self._set(user_id, "auto_media_type", pref)
 
+    # ── Per-user metadata toggle ──────────────────────────────────────────────
+
+    async def set_metadata(self, user_id: int, value: bool) -> None:
+        await self.users.update_one(
+            {"_id": int(user_id)},
+            {"$set": {"metadata": bool(value)}},
+            upsert=True,
+        )
+
+    async def get_metadata(self, user_id: int) -> bool:
+        return bool(await self._get(user_id, "metadata", False))
+
+    # ── Per-user metadata fields ──────────────────────────────────────────────
+
+    async def set_metadata_field(self, user_id: int, field: str, value: str) -> None:
+        await self.users.update_one(
+            {"_id": int(user_id)},
+            {"$set": {f"metadata_fields.{field}": value}},
+            upsert=True,
+        )
+
+    async def get_metadata_fields(self, user_id: int) -> dict:
+        doc = await self.users.find_one({"_id": int(user_id)}, {"metadata_fields": 1}) or {}
+        return {**_META_DEFAULTS, **(doc.get("metadata_fields") or {})}
+
     # ── Premium ───────────────────────────────────────────────────────────────
 
     async def is_premium(self, user_id: int, admin_ids: list[int] = None) -> bool:
@@ -271,27 +296,6 @@ class ManagerDB:
     # GLOBAL SETTINGS  (owner-controlled)
     # ══════════════════════════════════════════════════════════════════════════
 
-    async def get_global_metadata(self) -> dict:
-        # Hardcoded — always returns @Animes_Ocean, no DB lookup needed.
-        return {
-            "enabled":  True,
-            "title":    "@Animes_Ocean",
-            "author":   "@Animes_Ocean",
-            "artist":   "@Animes_Ocean",
-            "comment":  "@Animes_Ocean",
-            "audio":    "@Animes_Ocean",
-            "video":    "@Animes_Ocean",
-            "subtitle": "@Animes_Ocean",
-        }
-
-    async def set_global_metadata(self, fields: dict) -> int:
-        # No-op — metadata is hardcoded and cannot be changed.
-        return 1
-
-    async def get_metadata_version(self) -> int:
-        # Fixed version — no DB lookup needed.
-        return 1
-
     async def get_setting(self, key: str, default: Any = None) -> Any:
         doc = await self.settings.find_one({"_id": key})
         return (doc or {}).get("value", default)
@@ -300,6 +304,79 @@ class ManagerDB:
         await self.settings.update_one(
             {"_id": key}, {"$set": {"value": value}}, upsert=True
         )
+
+    # ── Global metadata ───────────────────────────────────────────────────────
+
+    async def get_global_metadata_enabled(self) -> bool:
+        """Return True when global metadata override is active."""
+        return bool(await self.get_setting("global_metadata_enabled", False))
+
+    async def set_global_metadata_enabled(self, enabled: bool) -> None:
+        """Enable or disable global metadata override (persisted)."""
+        await self.set_setting("global_metadata_enabled", bool(enabled))
+
+    async def get_global_metadata_fields(self) -> dict:
+        """Return the owner-configured global metadata fields."""
+        raw = await self.get_setting("global_metadata_fields", {})
+        return {**_META_DEFAULTS, **(raw or {})}
+
+    async def set_global_metadata_field(self, field: str, value: str) -> None:
+        """Set a single field in the global metadata configuration."""
+        existing = await self.get_setting("global_metadata_fields", {}) or {}
+        existing[field] = value
+        await self.set_setting("global_metadata_fields", existing)
+
+    async def set_global_metadata_fields(self, fields: dict) -> None:
+        """Replace the entire global metadata fields dict (owner bulk-set)."""
+        await self.set_setting("global_metadata_fields", dict(fields))
+
+    async def clear_global_metadata_fields(self) -> None:
+        """Reset all global metadata fields to empty strings."""
+        await self.set_setting("global_metadata_fields", dict(_META_DEFAULTS))
+
+    async def get_metadata_version(self) -> int:
+        """Return current metadata version counter (starts at 1)."""
+        return int(await self.get_setting("metadata_version", 1))
+
+    async def increment_metadata_version(self) -> None:
+        """Increment metadata version by 1 whenever global fields change."""
+        current = await self.get_metadata_version()
+        await self.set_setting("metadata_version", current + 1)
+
+    async def get_effective_metadata(self, user_id: int) -> tuple[bool, dict]:
+        """
+        Return the metadata (enabled, fields) that should be applied for a job.
+
+        Global override wins if enabled and has at least one non-empty field.
+        Falls back to per-user settings otherwise.
+
+        Returns:
+            (use_metadata: bool, fields: dict)
+        """
+        global_on = await self.get_global_metadata_enabled()
+        if global_on:
+            g_fields   = await self.get_global_metadata_fields()
+            has_values = any((v or "").strip() for v in g_fields.values())
+            return has_values, g_fields
+
+        # Fall through to per-user settings
+        doc = await self.users.find_one(
+            {"_id": int(user_id)}, {"metadata": 1, "metadata_fields": 1}
+        ) or {}
+        user_enabled = bool(doc.get("metadata", False))
+        raw_fields   = doc.get("metadata_fields") or {}
+        return user_enabled, {**_META_DEFAULTS, **raw_fields}
+
+    # Legacy alias — kept so any existing callers that used the old stub don't break
+    async def get_global_metadata(self) -> dict:
+        enabled = await self.get_global_metadata_enabled()
+        fields  = await self.get_global_metadata_fields()
+        return {"enabled": enabled, **fields}
+
+    async def set_global_metadata(self, fields: dict) -> int:
+        await self.set_global_metadata_fields(fields)
+        await self.increment_metadata_version()
+        return await self.get_metadata_version()
 
     # ══════════════════════════════════════════════════════════════════════════
     # WORKERS

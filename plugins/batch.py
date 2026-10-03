@@ -230,15 +230,6 @@ async def handle_file(client: Client, message: Message) -> None:
             )
 
     # ── Copy file to Worker Output Channel so all worker bots can access it ─────
-    # The user's DM with the Manager bot is private — worker bots cannot call
-    # get_messages() on it.  We copy the file to the shared Worker Output
-    # Channel (where all worker bots are admins) and store those coordinates.
-    #
-    # FIX BUG 7: Generate job_id ONCE here and reuse it for both the staging
-    # call (for log correlation) and the job document.  Previously _make_job_id()
-    # was called twice — once in the staging call and once below — producing two
-    # different UUIDs.  The staging log would say job_id=X while the DB stored
-    # job_id=Y, making debugging impossible and the logs misleading.
     from config import Config as _Config
     from helper.staging import stage_to_output_channel
 
@@ -259,21 +250,16 @@ async def handle_file(client: Client, message: Message) -> None:
             "╰━━━━━━━━━━━━━━━━━━━━━━━━╯"
         )
 
+    # ── Resolve effective metadata for this job ───────────────────────────────
+    use_meta, meta_fields   = await db.get_effective_metadata(user_id)
+    metadata_version        = await db.get_metadata_version()
+
+    if use_meta and any((v or "").strip() for v in meta_fields.values()):
+        metadata = meta_fields          # dict with title/artist/etc.
+    else:
+        metadata = {}                   # no metadata injection
+
     # ── Build job document ────────────────────────────────────────────────────
-    metadata_version = 1
-
-    # Hardcoded metadata — always embed @Animes_Ocean.
-    # Cannot be changed by any user, command, or database setting.
-    metadata = {
-        "title":    "@Animes_Ocean",
-        "artist":   "@Animes_Ocean",
-        "author":   "@Animes_Ocean",
-        "comment":  "@Animes_Ocean",
-        "audio":    "@Animes_Ocean",
-        "video":    "@Animes_Ocean",
-        "subtitle": "@Animes_Ocean",
-    }
-
     job = {
         "job_id":             job_id,      # reuse the same ID generated above
         "batch_id":           batch_id,
@@ -287,7 +273,7 @@ async def handle_file(client: Client, message: Message) -> None:
         "metadata_version":   metadata_version,
         "thumbnail_url":      thumbnail_url,
         "dump_enabled":       bool(ps.get("dump_mode") and ps.get("dump_channel")),
-        "upload_as":          _upload_as,        # NEW — "document" | "video" | "audio"
+        "upload_as":          _upload_as,        # "document" | "video" | "audio"
         "original_filename":  base_name,
         "file_size":          file_size,
         "created_at":         time.time(),
