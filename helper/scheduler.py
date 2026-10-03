@@ -209,6 +209,7 @@ class FairScheduler:
             metadata_version  = int(job.get("metadata_version") or 1),
             thumbnail_url     = job.get("thumbnail_url"),
             dump_enabled      = bool(job.get("dump_enabled", False)),
+            upload_as         = job.get("upload_as", "document"),   # NEW
         )
 
         try:

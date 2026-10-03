@@ -186,6 +186,19 @@ async def handle_file(client: Client, message: Message) -> None:
     # ── Snapshot pipeline settings ────────────────────────────────────────────
     ps = await db.get_pipeline_settings(user_id, Config.OWNER_IDS)
 
+    # ── Resolve upload_as from media preference ───────────────────────────────
+    _media_pref = ps.get("auto_media_type")   # None | "document" | "video" | "audio"
+    if _media_pref == "auto" or not _media_pref:
+        # Infer from Telegram message type
+        if message.video:
+            _upload_as = "video"
+        elif message.audio:
+            _upload_as = "audio"
+        else:
+            _upload_as = "document"
+    else:
+        _upload_as = _media_pref   # explicit user choice
+
     # ── Resolve thumbnail URL ─────────────────────────────────────────────────
     thumbnail_url = ps.get("thumbnail_url")
 
@@ -274,6 +287,7 @@ async def handle_file(client: Client, message: Message) -> None:
         "metadata_version":   metadata_version,
         "thumbnail_url":      thumbnail_url,
         "dump_enabled":       bool(ps.get("dump_mode") and ps.get("dump_channel")),
+        "upload_as":          _upload_as,        # NEW — "document" | "video" | "audio"
         "original_filename":  base_name,
         "file_size":          file_size,
         "created_at":         time.time(),
